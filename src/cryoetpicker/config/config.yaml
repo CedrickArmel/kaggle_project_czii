@@ -1,0 +1,297 @@
+project:
+  input: "/kaggle/input/byu-locating-bacterial-flagellar-motors-2025"
+  output: "/kaggle/working"
+
+# Callbacks
+callbacks:
+  checkpoint:
+    filename: "{epoch}-{step}-{val_loss:.2e}-{fbeta1:.2e}-{fbeta2:.2e}"
+    monitor: train_loss
+    verbose: false
+    save_last: true
+    save_top_k: 3
+    mode: min
+    auto_insert_metric_name: true
+    save_weights_only: false
+    every_n_train_steps: 0  # x to deactivate
+    train_time_interval: null
+    every_n_epochs: "${eval: 1 if not ${callbacks_args.checkpoint.every_n_train_steps} and not ${callbacks_args.checkpoint.train_time_interval} else None}"
+    save_on_train_epoch_end: false
+    enable_version_counter: false
+  lr_monitor:
+    logging_interval: step
+    log_momentum: true
+    log_weight_decay: true
+
+
+# Dataset/DataLoader
+dataset:
+  transforms:
+    gamma: 2
+    new_size: [288, 480, 480]
+    roi_size: [96, 160, 160]
+    batch_size: 1
+    ratios: [0, 1]
+    reduce_mode: "nearest-exact"
+    reduce_align_corners: null
+  train:
+    sub_epochs: 1
+  eval:
+    sub_epochs: 1
+
+loader:
+  train:
+    batch_size: 1
+    num_workers: 2
+    shuffle: true
+    drop_last: true
+    persistent_workers: false
+    prefetch_factor: 2
+    pin_memory: false
+  eval:
+    batch_size: 1
+    num_workers: 2
+    shuffle: false
+    drop_last: true
+    persistent_workers: false
+    prefetch_factor: 2
+    pin_memory: false
+
+
+# Model
+models:
+  flexible:
+    spatial_dims: 3
+    in_channels: 1
+    out_channels: 2  # 2 classes: background and motor
+    backbone: "${backbone}"
+    pretrained: true
+    upsample: "deconv"
+    decoder_channels: [256, 128]
+    skip_connect: 4
+
+training:
+  xp:
+    fold: 0
+    overfit: false
+    overfit_samples:
+      - "tomo_226cd8"
+      - "tomo_00e463"
+      - "tomo_08bf73"
+      - "tomo_2daaee"
+      - "tomo_e22370"
+      - "tomo_183270"
+      - "tomo_ae347a"
+      - "tomo_1ab322"
+    df_file: byu_folded_non_empty_tomograms_seed57.csv
+  determinism:
+    seed: 4294967295
+    cudnn_backend: false
+    use_deterministic_algorithms: false
+    warn_only: true
+  supervision:
+    freeze_encoder: true
+    deep_supervision: true
+    loss_contributions: [1, 1, 1] # [avg_loss, max_loss, dice_loss]
+    weighted_loss: false
+  augs:
+    mixup:
+      add: false
+      beta: 5.0
+      p: 0.0
+    cutmix:
+      beta: 5.0
+      dims: [-2, -1]
+      p: 0.0
+    smoothing: 0.0
+  batches:
+    train: -1
+    eval: 4
+  ckpt_path: null
+
+# Competion metrics
+metrics:
+  score:
+    super:
+      compute_on_cpu: true
+      dist_sync_on_step: false
+      process_group: null
+      dist_sync_fn: null
+      distributed_available_fn: null
+      sync_on_compute: true
+      compute_with_cache: true
+      dist_reduce_fx: "cat"
+
+    init:
+      dt_multiplier: 1.0
+      max_th: 1.0
+      motor_radius: 500
+      score_beta: 2.0
+
+# Optimizers
+optimizer:
+  name: SGD
+  lr: 0.1
+  weight_decay: 0.0
+  sgd:
+    lr: "${optimizer.lr}"
+    sgd_momentum: 0.
+    sgd_nesterov: false
+    weight_decay: "${optimizer.weight_decay}"
+  adam:
+    lr: "${optimizer.lr}"
+    weight_decay: "${optimizer.weight_decay}"
+  adamw_args:
+    lr: "${optimizer.lr}"
+    weight_decay: "${optimizer.weight_decay}"
+  adamwplus_args:
+    lr: "${optimizer.lr}"
+    weight_decay: "${optimizer.weight_decay}"
+
+# Optmization
+loss:
+  include_background: true
+  to_onehot_y: true
+  gamma: 2.
+  alpha: null
+  weight: [1, 5e3]
+  reduction: mean
+  use_softmax: true
+
+max_loss:
+  loss:
+    include_background: true
+    to_onehot_y: true
+    gamma: 2.
+    alpha: null
+    weight: [1, 75]
+    reduction: mean
+    use_softmax: true
+  pooling:
+    kernel_size: 4
+    stride: 4
+    padding: 0
+    dilation: 1
+
+avg_loss:
+  loss:
+    include_background: true
+    to_onehot_y: true
+    gamma: 2.
+    alpha: null
+    weight: [1, 6e2]
+    reduction: mean
+    use_softmax: true
+  pooling:
+    kernel_size: 2
+    stride: 2
+    padding: 0
+
+dice:
+  include_background: true
+  to_onehot_y: true
+  sigmoid: false
+  softmax: true
+  other_act: null
+  squared_pred: false
+  jaccard: false
+  reduction: none
+  smooth_nr: 1e-10
+  smooth_dr: 1e-10
+  batch: false
+  weight: null
+
+w_init:
+  dist: normal
+  a: 0.1
+  mode: fan_out
+  nonlinearity: leaky_relu
+
+# Profiler
+profiler:
+  accelerator: "xla"
+  xla:
+    profiler_port: 9001
+  torch:
+    emit_nvtx: true
+    prof_filename: prof_filename.txt
+
+# Scheduler
+scheduler:
+  name: multistep
+  eta_min: 1e-5
+  warmup: 100
+  restart_scheduler: true
+
+  multistep:
+    milestones: 2
+    gamma: "${scheduler.eta_min}"
+
+  cosine:
+    T_max: 100
+    eta_min: "${scheduler.eta_min}"
+    last_epoch: -1
+
+  cosine_wr:
+    T_0: 50
+    T_mult: 1
+    eta_min: "${scheduler.eta_min}"
+    last_epoch: -1
+
+  linear:
+    start_factor: "${scheduler.eta_min}"
+    end_factor: 1.0
+    total_iters: "${scheduler.warmup}"
+
+# Trainer
+trainers:
+  lightning:
+    accumulate_grad_batches: 1
+    gradient_clip_algorithm: norm
+    gradient_clip_val: 1
+    precision: "bf16-true"
+    sync_batchnorm: true
+    accelerator: "tpu"
+    devices: auto
+    num_nodes: 1
+    strategy: auto
+    use_distributed_sampler: true
+    reload_dataloaders_every_n_epochs: 0
+    benchmark: null
+    barebones: false
+    detect_anomaly: false
+    fast_dev_run: false
+    num_sanity_val_steps: 0
+    overfit_batches: 0
+    profiler: "${eval: None if not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run} else None}"
+    plugins: null
+    default_root_dir: "${project.output}"
+    enable_checkpointing: true
+    enable_model_summary: false
+    enable_progress_bar: true
+    logger: "${eval: not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run}}"
+    log_every_n_steps: 2
+    model_registry: null
+    callbacks: "${eval: True if not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run} else None}"
+    check_val_every_n_epoch: null
+    inference_mode: true
+    limit_predict_batches: 1.0
+    limit_test_batches: 1.0
+    limit_train_batches: 1.0
+    limit_val_batches: 1.0
+    max_epochs: 1000
+    min_epochs: null
+    max_steps: -1
+    max_time: null
+    min_steps: null
+    val_check_interval: 96
+    deterministic: "warn"
+
+# Post-Processing
+pp:
+  nms_radius: 16
+  topk: 10
+  up_interp_mode: "nearest-exact"
+  up_align_corners: null
+  down_interp_mode: "nearest-exact"
+  down_align_corners: null
