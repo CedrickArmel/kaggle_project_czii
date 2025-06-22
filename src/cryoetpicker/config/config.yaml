@@ -1,3 +1,56 @@
+copick:
+  base:
+    voxel_spacing: 10
+    resolution: "0"
+    tomotype: denoised
+  fit:
+    mode: fit
+    path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_fit.json
+    fold: TS_5_4
+    user_id: copick
+    session_id: "0"
+    repeat: [10, 8]
+  test:
+    mode: test
+    path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_test.json
+    repeat: [8, ]
+
+transforms:
+  base:
+    roi_size: [96, 96, 96]
+  train:
+    mode: train
+    keys: ["input", "target"]
+    num_samples: 1
+    num_classes: 7 # BG included
+    ratios: null
+  validation:
+    mode: validation
+    keys: ["input", "target"]
+  test:
+    mode: test
+    keys: ["input"]
+
+loader:
+  train:
+    batch_size: 1
+    num_workers: 2
+    shuffle: true
+    drop_last: true
+    persistent_workers: false
+    prefetch_factor: 2
+    pin_memory: false
+  eval:
+    batch_size: 1
+    num_workers: 2
+    shuffle: false
+    drop_last: true
+    persistent_workers: false
+    prefetch_factor: 2
+    pin_memory: false
+
+
+
 project:
   input: "/kaggle/input/byu-locating-bacterial-flagellar-motors-2025"
   output: "/kaggle/working"
@@ -24,38 +77,9 @@ callbacks:
     log_weight_decay: true
 
 
-# Dataset/DataLoader
-dataset:
-  transforms:
-    gamma: 2
-    new_size: [288, 480, 480]
-    roi_size: [96, 160, 160]
-    batch_size: 1
-    ratios: [0, 1]
-    reduce_mode: "nearest-exact"
-    reduce_align_corners: null
-  train:
-    sub_epochs: 1
-  eval:
-    sub_epochs: 1
 
-loader:
-  train:
-    batch_size: 1
-    num_workers: 2
-    shuffle: true
-    drop_last: true
-    persistent_workers: false
-    prefetch_factor: 2
-    pin_memory: false
-  eval:
-    batch_size: 1
-    num_workers: 2
-    shuffle: false
-    drop_last: true
-    persistent_workers: false
-    prefetch_factor: 2
-    pin_memory: false
+
+
 
 
 # Model

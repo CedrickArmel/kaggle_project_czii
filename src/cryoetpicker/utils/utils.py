@@ -22,17 +22,15 @@
 
 import os
 import random
-from collections import defaultdict
-from glob import glob
 from typing import Any
 from warnings import warn
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.optim as optim
 from lightning.pytorch.callbacks import Callback, LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.profilers import Profiler, PyTorchProfiler, XLAProfiler
+from monai.data.utils import list_data_collate
 from torch.nn.init import (
     calculate_gain,
     kaiming_normal_,
@@ -52,30 +50,6 @@ from torch.optim.lr_scheduler import (
 from torch.utils.data import DataLoader
 
 
-def collate_fn(batch: "list[dict[str, Any]]") -> "dict[str, Any]":
-    """Collate function to batch a list of dictionaries into a single dictionary."""
-    batch_data = defaultdict(lambda: [])
-    str_keys = []
-    tensor_keys = []
-    for b in batch:
-        s = len(b["input"])
-        for key, value in b.items():
-            if not isinstance(value, torch.Tensor):
-                batch_data[key].extend([value] * s)
-                str_keys.append(key)
-            else:
-                batch_data[key].append(value)
-                tensor_keys.append(key)
-    batch_dict: "dict[str, Any]" = {key: batch_data[key] for key in str_keys}
-    for key in tensor_keys:
-        batch_dict[key] = (
-            torch.cat(batch_data[key])
-            if key in ["input", "target", "zyx"]
-            else torch.stack(batch_data[key])
-        )
-    return batch_dict
-
-
 def create_milestones(steps: "int", m: "int") -> "list[int]":
     """returns a list of milestones for the given number of steps and m."""
     g = int(steps // m)
@@ -91,50 +65,12 @@ def get_callbacks(callbacks_args: "dict[str, Any]") -> "tuple[Callback, ...]":
     return chckpt_cb, lr_cb
 
 
-def get_data(
-    mode: "str",
-    input: "str",
-    df_file: "str",
-    fold: "int" = 0,
-    overfit: "bool" = False,
-    overfit_samples: "list[str] | None" = None,
-) -> "tuple[pd.DataFrame, ...] | pd.DataFrame":
-    if mode not in ["fit", "test"]:
-        raise ValueError("mode argument must be one of train, validation or test!")
-    if overfit and (overfit_samples is None):
-        raise ValueError("overfit_samples must be provided if overfit is set to True")
-    df_path = os.path.join(input, df_file)
-    if overfit:
-        df = pd.read_csv(df_path)
-        train_df = df[df.tomo_id.isin(overfit_samples)]
-        val_df = df[df.fold == 0]
-        data = (train_df, val_df)
-
-    elif mode == "fit":
-        df = pd.read_csv(df_path)
-        if fold > -1:
-            train_df = df[df.fold != fold]
-            val_df = df[df.fold == fold]
-        else:
-            train_df = df[df.fold != 0]
-            val_df = df[df.fold == 0]
-        data = (train_df, val_df)
-
-    elif mode == "test":
-        test_tomo_id = sorted(
-            [path.split("/")[-1] for path in glob(os.path.join(input, "test", "**"))]
-        )
-        num_ids = list(range(0, len(test_tomo_id)))
-        data = pd.DataFrame(dict(tomo_id=test_tomo_id, id=num_ids))
-    return data
-
-
 def get_data_loader(dataset, seed: "int", **kwargs) -> "DataLoader":
     # TODO: import dataset in launcher
     g = get_seeded_generator(seed)
     loader = DataLoader(
         dataset=dataset,
-        collate_fn=collate_fn,
+        collate_fn=list_data_collate,
         worker_init_fn=seed_worker,
         generator=g,
         **kwargs,

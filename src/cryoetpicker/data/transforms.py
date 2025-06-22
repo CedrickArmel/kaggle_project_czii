@@ -20,62 +20,46 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# TODO: Docstrings
+
 import monai.transforms as mt
 
 
 def get_transforms(
     mode: "str",
-    ratios: "list[int]",
+    keys: "list[str]",
     roi_size: "list[int]",
-    batch_size: "int",
-    n_classes: "int",
+    num_samples: "int | None" = None,
+    num_classes: "int | None" = None,
+    ratios: "list[int] | None" = None,
 ) -> "mt.Compose":
-    if mode not in ["static", "test", "train", "validation"]:
-        raise ValueError("mode argument must be one of eval, static, test or train!")
-
-    if mode.lower() == "static":
-        compose = mt.Compose(
-            [
-                mt.EnsureChannelFirstd(
-                    keys=["input", "target"], channel_dim="no_channel"
-                ),
-                mt.NormalizeIntensityd(keys=["input"]),
-                mt.Orientationd(keys=["input", "target"], axcodes="RAS"),
-            ]
-        )
-    elif mode.lower() == "train":
-        compose = mt.Compose(
-            [
-                mt.RandCropByLabelClassesd(
-                    keys=["input", "target"],
-                    label_key="target",
-                    spatial_size=list(roi_size),
-                    num_samples=batch_size,
-                    num_classes=n_classes,
-                    ratios=ratios,
-                    warn=True,
-                )
-            ]
-        )
-    elif mode.lower() == "validation":
-        compose = mt.Compose(
-            [
-                mt.GridPatchd(
-                    keys=["input", "target"],
-                    patch_size=list(roi_size),
-                    pad_mode="reflect",
-                )
-            ]
-        )
-    elif mode.lower() == "test":
-        compose = mt.Compose(
-            [
-                mt.EnsureChannelFirstd(keys=["input"], channel_dim="no_channel"),
-                mt.NormalizeIntensityd(keys=["input"]),
-                mt.Orientationd(keys=["input"], axcodes="RAS"),
-                mt.GridPatchd(
-                    keys=["input"], patch_size=list(roi_size), pad_mode="reflect"
-                ),
-            ]
-        )
-    return compose
+    if mode not in ["test", "train", "validation"]:
+        raise ValueError("mode argument must be one of eval, test or train!")
+    static: "list[mt.Transform]" = [
+        mt.EnsureChannelFirstd(keys=keys, channel_dim="no_channel"),
+        mt.NormalizeIntensityd(keys=["input"]),
+        mt.Orientationd(keys=keys, axcodes="RAS"),
+    ]
+    if mode == "train":
+        train: "list[mt.Transform]" = [
+            mt.RandCropByLabelClassesd(
+                keys=keys,
+                label_key="target",
+                spatial_size=list(roi_size),
+                num_samples=num_samples,
+                num_classes=num_classes,
+                ratios=ratios,
+                warn=True,
+            )
+        ]
+        compose: "list[mt.Transform]" = static + train
+    else:
+        val: "list[mt.Transform]" = [
+            mt.GridPatchd(
+                keys=keys,
+                patch_size=list(roi_size),
+                pad_mode="reflect",
+            )
+        ]
+        compose = static + val
+    return mt.Compose(compose)

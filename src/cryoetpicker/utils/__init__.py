@@ -21,9 +21,7 @@
 # SOFTWARE.
 
 from .utils import (
-    collate_fn,
     get_callbacks,
-    get_data,
     get_data_loader,
     get_optimizer,
     get_profiler,
@@ -33,9 +31,7 @@ from .utils import (
 )
 
 __all__ = [
-    "collate_fn",
     "get_callbacks",
-    "get_data",
     "get_data_loader",
     "get_optimizer",
     "get_profiler",
