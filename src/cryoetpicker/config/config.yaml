@@ -1,3 +1,4 @@
+# Data Management
 copick:
   base:
     voxel_spacing: 10
@@ -15,6 +16,7 @@ copick:
     path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_test.json
     repeat: [8, ]
 
+# Data Transforms
 transforms:
   base:
     roi_size: [96, 96, 96]
@@ -31,6 +33,7 @@ transforms:
     mode: test
     keys: ["input"]
 
+# DataLoaders
 loader:
   train:
     batch_size: 1
@@ -49,11 +52,21 @@ loader:
     prefetch_factor: 2
     pin_memory: false
 
-
-
-project:
-  input: "/kaggle/input/byu-locating-bacterial-flagellar-motors-2025"
-  output: "/kaggle/working"
+# Metrics
+metrics:
+  score:
+    super:
+      compute_on_cpu: true
+      dist_sync_on_step: false
+      process_group: null
+      dist_sync_fn: null
+      distributed_available_fn: null
+      sync_on_compute: true
+      compute_with_cache: true
+      dist_reduce_fx: "cat"
+    init:
+      beta: 2.0
+      multiplier: 1.0
 
 # Callbacks
 callbacks:
@@ -77,8 +90,9 @@ callbacks:
     log_weight_decay: true
 
 
-
-
+project:
+  input: "/kaggle/input/byu-locating-bacterial-flagellar-motors-2025"
+  output: "/kaggle/working"
 
 
 
@@ -133,24 +147,6 @@ training:
     eval: 4
   ckpt_path: null
 
-# Competion metrics
-metrics:
-  score:
-    super:
-      compute_on_cpu: true
-      dist_sync_on_step: false
-      process_group: null
-      dist_sync_fn: null
-      distributed_available_fn: null
-      sync_on_compute: true
-      compute_with_cache: true
-      dist_reduce_fx: "cat"
-
-    init:
-      dt_multiplier: 1.0
-      max_th: 1.0
-      motor_radius: 500
-      score_beta: 2.0
 
 # Optimizers
 optimizer:

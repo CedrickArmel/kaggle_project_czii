@@ -26,9 +26,9 @@ https://www.kaggle.com/code/metric/czi-cryoet-84969?scriptVersionId=208227222&ce
 """
 
 import torch
+from scipy.spatial import KDTree
 from torchmetrics import Metric
-
-# from torchmetrics.utilities import dim_zero_cat
+from torchmetrics.utilities import dim_zero_cat
 
 
 class Score(Metric):
@@ -36,15 +36,13 @@ class Score(Metric):
         self,
         beta: "float" = 2.0,
         multiplier: "float" = 1.0,
-        radius: "float" = 500.0,
-        threshold: "float" = 0.5,
         **kwargs,
     ) -> "None":
         super().__init__(**kwargs)
         self.beta = beta
         self.multiplier = multiplier
-        self.radius = radius
-        self.threshold = threshold
+        self.radius = {"0": 60, "1": 65, "2": 90, "3": 150, "4": 130, "5": 135}
+        self.weights = {"0": 1, "1": 0, "2": 2, "3": 1, "4": 2, "5": 1}
         self.add_state(name="preds", default=[], dist_reduce_fx="cat")
         self.add_state(name="targets", default=[], dist_reduce_fx="cat")
         self.preds: "list[torch.Tensor]"
@@ -55,7 +53,80 @@ class Score(Metric):
         self.targets.append(target)
 
     def compute(self) -> "dict[str, float]":
-        # preds: "torch.Tensor" = dim_zero_cat(x=self.preds)
-        # targets: "torch.Tensor" = dim_zero_cat(x=self.targets)
-        score = 0.0
+        preds: "torch.Tensor" = dim_zero_cat(x=self.preds)  # z, y, x, label, run_id
+        targets: "torch.Tensor" = dim_zero_cat(x=self.targets)
+        targets = torch.unique(targets, dim=0)
+        score = self.score(preds=preds, targets=targets)
         return dict(score=score)
+
+    def compute_metrics(
+        self, candidates: "torch.Tensor", references: "torch.Tensor", radius: "float"
+    ) -> "tuple[int, ...]":
+        radius = radius * self.multiplier
+
+        n_references = references.shape[0]
+        n_candidates = candidates.shape[0]
+
+        ref_tree = KDTree(references.cpu().numpy())
+        candidate_tree = KDTree(candidates.cpu().numpy())
+        raw_matches = candidate_tree.query_ball_tree(ref_tree, r=radius)
+        raw_matches_extend = []
+        for match in raw_matches:
+            raw_matches_extend.extend(match)
+        matches_within_threshold = set(raw_matches_extend)
+        tp = int(len(matches_within_threshold))
+        fp = int(n_candidates - tp)
+        fn = int(n_references - tp)
+        return tp, fp, fn
+
+    def score(self, preds: "torch.Tensor", targets: "torch.Tensor"):
+        select_candidates: "torch.Tensor" = torch.isin(preds[:, -1], targets[:, -1])
+        preds = preds[select_candidates]
+        runs = torch.unique(targets[:, -1]).cpu().numpy().tolist()
+        particles = torch.unique(targets[:, -2]).cpu().numpy().tolist()
+        results = {}
+        for obj in particles:
+            results[str(obj)] = {"tp": 0, "fp": 0, "fn": 0}
+
+        for run in runs:
+            for particle in particles:
+                radius = self.radius[str(particle)]
+                select = (targets[:, -1] == run) & (targets[:, -2] == particle)
+                references = targets[select]
+
+                select = (preds[:, -1] == run) & (preds[:, -2] == particle)
+                candidates = preds[select]
+
+                if references.shape[0] == 0:
+                    results[str(particle)]["fp"] += candidates.shape[0]
+                    continue
+
+                if candidates.shape[0] == 0:
+                    results[str(particle)]["fn"] += references.shape[0]
+                    continue
+
+                tp, fp, fn = self.compute_metrics(
+                    candidates=candidates, references=references, radius=radius
+                )
+                results[str(particle)]["tp"] += tp
+                results[str(particle)]["fp"] += fp
+                results[str(particle)]["fn"] += fn
+
+        aggregate_fbeta = 0.0
+        for particle, totals in results.items():
+            tp = totals["tp"]
+            fp = totals["fp"]
+            fn = totals["fn"]
+
+            precision = tp / (tp + fp) if tp + fp > 0 else 0
+            recall = tp / (tp + fn) if tp + fn > 0 else 0
+            fbeta = (
+                (1 + self.beta**2)
+                * (precision * recall)
+                / (self.beta**2 * precision + recall)
+                if (precision + recall) > 0
+                else 0.0
+            )
+            aggregate_fbeta += fbeta * self.weights.get(particle, 1.0)
+        aggregate_fbeta / sum(self.weights.values())
+        return aggregate_fbeta
