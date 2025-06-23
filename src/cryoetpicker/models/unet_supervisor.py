@@ -65,6 +65,7 @@ class UNetSupervisor(nn.Module):  # type: ignore[misc]
         has_target = "target" in batch
         full_size = batch["input"].shape[0]
         device: "torch.device" = batch["input"].device
+        location = batch["input"].meta["location"]
 
         target: "torch.Tensor" = torch.empty(
             0, device=device
@@ -124,10 +125,7 @@ class UNetSupervisor(nn.Module):  # type: ignore[misc]
 
         if not self.training:
             outputs["logits"] = logits
-            if "location" in batch:
-                outputs["location"] = batch["location"]
-            if "scale" in batch:
-                outputs["scale"] = batch["scale"]
+            outputs["location"] = location
             if "id" in batch:
                 outputs["id"] = batch["id"]
         return outputs

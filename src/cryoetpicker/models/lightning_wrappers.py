@@ -19,11 +19,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
+'''
 import os
 from typing import Any
 
-import lightning.pytorch as L
 import torch
 from omegaconf import DictConfig
 from torch.optim import Optimizer
@@ -34,10 +33,15 @@ from cryoetpicker.metrics import Score
 from cryoetpicker.processings import post_process_pipeline
 from cryoetpicker.utils import get_optimizer, get_scheduler, initialize_weights
 
+from .augmentation import CutmixSimple, Mixup
+from .flexible_unet import FxFlexibleUNet
 
-class LightningWrapper(L.LightningModule):
+
+
+
+
+class LightningFxUnet3D(L.LightningModule):
     """Lightning wrapper for PyTorch models"""
-
     def __init__(self, cfg: "DictConfig", module: "torch.nn.Module") -> None:
         """_summary_
 
@@ -47,8 +51,40 @@ class LightningWrapper(L.LightningModule):
         """
         super().__init__()
         self.cfg = cfg
-        self.module = module
         self.validation_step_outputs: "list[torch.Tensor]" = []
+        self.backbone = FxFlexibleUNet(**cfg.models.flexible)
+        self.mixup = Mixup(**cfg.training.augs.mixup)
+        self.cutmix = CutmixSimple(**cfg.training.augs.cutmix)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def forward(self, batch: "dict[str, Any]") -> "torch.Tensor":
         return self.module(batch)
@@ -237,3 +273,14 @@ class LightningWrapper(L.LightningModule):
             prog_bar=False,
             sync_dist=True,
         )
+'''
+
+
+import lightning.pytorch as L
+
+
+class LightningFxUnet3D(L.LightningModule):
+    def __init__(
+        self,
+    ):
+        pass
