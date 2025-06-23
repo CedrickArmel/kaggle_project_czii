@@ -1,4 +1,9 @@
+SHELL:=/bin/bash
+
 UV_VERSION ?= 0.7.13
+PYTHON_VERSION ?= 3.10.16
+VENV ?= cryoetpicker
+PYENV_GIT_TAG ?= v2.6.3
 
 define GPUENVVARS
 # Hydra debug
@@ -50,8 +55,8 @@ export NV_LIBNCCL_PACKAGE_VERSION="2.22.3-1"
 export NV_LIBNCCL_DEV_PACKAGE="libnccl-dev=2.22.3-1+cuda12.5"
 export NV_LIBNCCL_DEV_PACKAGE_NAME="libnccl-dev"
 export NV_LIBNCCL_DEV_PACKAGE_VERSION="2.22.3-1"
-
 endef
+
 
 define TPUENVVARS
 # Unset environment variables that are not needed
@@ -75,28 +80,78 @@ export TPU_SKIP_MDS_QUERY=1
 export TPU_WORKER_HOSTNAMES=localhost
 export TPU_WORKER_ID=0
 export XLA_TENSOR_ALLOCATOR_MAXSIZE=100000000
+endef
 
+
+define PYENVINIT
+# Pyenv setup
+
+export PYENV_ROOT="$$HOME/.pyenv"
+[[ -d $$PYENV_ROOT/bin ]] && export PATH="$$PYENV_ROOT/bin:$$PATH"
+eval "$$(pyenv init - bash)"
+eval "$$(pyenv virtualenv-init -)"
+endef
+
+define UVALIASES
+# uv aliases
+
+alias uvadd="uv add --active"
+alias uvsync="uv sync --active"
 endef
 
 export GPUENVVARS
 export TPUENVVARS
+export PYENVINIT
+export PYENV_GIT_TAG
+export UVALIASES
 
-.PHONY: tpusetup gpusetup uv
+.PHONY: tpusetup gpusetup remove-tf uv pyenv venv reload
 
-tpusetup: tpuenvs remove-tf uv
-gpusetup: gpuenvs remove-tf uv
+tpusetup: tpuenvs remove-tf uv pyenv venv reload
+gpusetup: gpuenvs remove-tf uv pyenv venv reload
+cpusetup: remove-tf uv pyenv venv reload
 
 uv:
-	@echo '# uv setup\\n' >> ~/.bashrc
+	@echo "Installing uv, Python 🐍 package 📦 manager..."
+	@grep -q '# uv setup' ~/.bashrc || echo '# uv setup' >> ~/.bashrc
 	@curl -LsSf https://astral.sh/uv/$(UV_VERSION)/install.sh | sh
-	@echo 'eval "$(uv generate-shell-completion bash)"' >> ~/.bashrc
-	@echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+	@grep -q 'uv generate-shell-completion bash' ~/.bashrc || echo 'eval "$$(uv generate-shell-completion bash)"' >> ~/.bashrc
+	@grep -q 'uvx --generate-shell-completion bash' ~/.bashrc || echo 'eval "$$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+	@grep -q '# uv aliases' ~/.bashrc || echo "$$UVALIASES" >> ~/.bashrc
+	@echo "✅ uv installation completed!"
+
+pyenv:
+	@echo "Installing Pyenv, Python 🐍 version manager..."
+	@curl https://pyenv.run | bash
+	@grep -q 'pyenv init' ~/.bashrc || echo "$$PYENVINIT" >> ~/.bashrc
+	@echo "✅ Pyenv installation completed!"
+
+venv:
+	@echo "🔄 Creating virtual environment 📦..."
+	@source ~/.bashrc && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
+	if ! pyenv versions --bare | grep -q "^$(PYTHON_VERSION)$$"; \
+	then pyenv install $(PYTHON_VERSION); \
+	else  echo "✅ Python 🐍 $(PYTHON_VERSION) is already installed!"; fi
+	@source ~/.bashrc && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
+	if ! pyenv virtualenvs --bare | grep -q "^$(VENV)$$"; \
+	then pyenv virtualenv $(PYTHON_VERSION) $(VENV); \
+	else echo "✅ Virtual environment 📦 exists already!"; fi
+	@echo "✅ Virtual environment creation completed!"
 
 remove-tf:
+	@echo "🔄 Removing tensoflow package family to avoid conflicts"
 	@pip uninstall tensorflow tensorflow-tpu tensorboard -y
+	@echo "✅ Packages removed successfully!"
 
 tpuenvs:
-	@echo "$$TPUENVVARS" >> ~/.bashrc
+	@echo "🔄 Setting up  TPU environment variables..."
+	@grep -q '# Set environment variables for TPU' ~/.bashrc || echo "$$TPUENVVARS" >> ~/.bashrc
+	@echo "✅ TPU environment variables added successfully!"
 
 gpuenvs:
-	@echo "$$GPUENVVARS" >> ~/.bashrc
+	@echo "🔄 Setting up  GPU environment variables..."
+	@grep -q '# Set environment variables for GPU' ~/.bashrc || echo "$$GPUENVVARS" >> ~/.bashrc
+	@echo "✅ GPU environment variables added successfully!"
+
+reload:
+	@echo '⏭️ Manually run `source ~/.bashrc` for changes to be active ✅'
