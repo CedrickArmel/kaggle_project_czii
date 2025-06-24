@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "Cédrick-Armel YEBOUET", email = "35418979+CedrickArmel@users.noreply.github.com" }
+    { name = "Cédrick-Armel YEBOUET", email = "35418979+CedrickArmel@users.noreply.github.com" },
 ]
 requires-python = ">=3.10.16"
 dependencies = [
@@ -30,6 +30,13 @@ dev = [
     "mypy>=1.16.1",
     "pre-commit>=4.2.0",
 ]
-xla = [
-    "torch-xla[tpu]~=2.7.0",
-]
+xla = ["torch-xla[tpu]~=2.7.0"]
+
+[tool.pylint.messages-control]
+disable = []
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
