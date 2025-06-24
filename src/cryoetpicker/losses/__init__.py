@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from .deep_supervision import DeepLoss
 from .focal_loss import FocalLoss
+from .pooling import AvgPool3DLoss, LocalFocalLoss, MaxPool3DLoss
 
-__all__ = ["FocalLoss"]
+__all__ = ["AvgPool3DLoss", "DeepLoss", "FocalLoss", "LocalFocalLoss", "MaxPool3DLoss"]

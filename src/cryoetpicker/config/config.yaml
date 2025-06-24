@@ -159,6 +159,7 @@ optimizer:
     lr: "${optimizer.lr}"
     weight_decay: "${optimizer.weight_decay}"
 
+# TODO: refactor optimization args
 # Optmization
 loss:
   include_background: true

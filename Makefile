@@ -128,11 +128,11 @@ pyenv:
 
 venv:
 	@echo "🔄 Creating virtual environment 📦..."
-	@source ~/.bashrc && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
+	@export PYENV_ROOT="$$HOME/.pyenv" && export PATH="$$PYENV_ROOT/bin:$$PATH" && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
 	if ! pyenv versions --bare | grep -q "^$(PYTHON_VERSION)$$"; \
 	then pyenv install $(PYTHON_VERSION); \
 	else  echo "✅ Python 🐍 $(PYTHON_VERSION) is already installed!"; fi
-	@source ~/.bashrc && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
+	@export PYENV_ROOT="$$HOME/.pyenv" && export PATH="$$PYENV_ROOT/bin:$$PATH" && eval "$$(pyenv init --path)" && eval "$$(pyenv init -)" && \
 	if ! pyenv virtualenvs --bare | grep -q "^$(VENV)$$"; \
 	then pyenv virtualenv $(PYTHON_VERSION) $(VENV); \
 	else echo "✅ Virtual environment 📦 exists already!"; fi
