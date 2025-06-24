@@ -4,6 +4,7 @@ conf/local/*
 data/*
 outputs/
 .vscode/
+notebooks/local*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,0 +1,287 @@
+# Data Management
+copick:
+  base:
+    voxel_spacing: 10
+    resolution: "0"
+    tomotype: denoised
+  fit:
+    mode: fit
+    path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_fit.json
+    fold: TS_5_4
+    user_id: copick
+    session_id: "0"
+    repeat: [10, 8]
+  test:
+    mode: test
+    path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_test.json
+    repeat: [8, ]
+
+# Data Transforms
+transforms:
+  base:
+    roi_size: [96, 96, 96]
+  train:
+    mode: train
+    keys: ["input", "target"]
+    num_samples: 1
+    num_classes: 7 # BG included
+    ratios: null
+  validation:
+    mode: validation
+    keys: ["input", "target"]
+  test:
+    mode: test
+    keys: ["input"]
+
+# DataLoaders
+loader:
+  train:
+    batch_size: 1
+    num_workers: 2
+    shuffle: true
+    drop_last: true
+    persistent_workers: false
+    prefetch_factor: 2
+    pin_memory: false
+  eval:
+    batch_size: 1
+    num_workers: 2
+    shuffle: false
+    drop_last: true
+    persistent_workers: false
+    prefetch_factor: 2
+    pin_memory: false
+
+# Metrics
+metrics:
+  score:
+    super:
+      compute_on_cpu: true
+      dist_sync_on_step: false
+      process_group: null
+      dist_sync_fn: null
+      distributed_available_fn: null
+      sync_on_compute: true
+      compute_with_cache: true
+      dist_reduce_fx: "cat"
+    init:
+      beta: 2.0
+      multiplier: 1.0
+
+# Post-Processing
+pp:
+  nms_radius: 16
+  num_classes: "$transforms.train.num_classes"
+  topk: 200
+  roi_size: "$transforms.base.roi_size"
+  tomo_size: "${eval: [int(192/(2^int($copick.base.resolution))), int(640/(2^int($copick.base.resolution))), int(640/(2^int($copick.base.resolution)))]"
+  interpolation: "nearest-exact"
+  align_corners: null
+
+# Callbacks
+callbacks:
+  checkpoint:
+    filename: "{epoch}-{step}-{val_loss:.2e}-{fbeta1:.2e}-{fbeta2:.2e}"
+    monitor: train_loss
+    verbose: false
+    save_last: true
+    save_top_k: 3
+    mode: min
+    auto_insert_metric_name: true
+    save_weights_only: false
+    every_n_train_steps: 0  # x to deactivate
+    train_time_interval: null
+    every_n_epochs: "${eval: 1 if not ${callbacks.checkpoint.every_n_train_steps} and not ${callbacks.checkpoint.train_time_interval} else None}"
+    save_on_train_epoch_end: false
+    enable_version_counter: false
+  lr_monitor:
+    logging_interval: step
+    log_momentum: true
+    log_weight_decay: true
+
+# Model
+models:
+  flexible:
+    spatial_dims: 3
+    in_channels: 1
+    out_channels: "$transforms.train.num_classes" # 2 classes: background and motor
+    backbone: resnet34
+    pretrained: true
+    upsample: "deconv"
+    decoder_channels: [256, 128]
+    skip_connect: 4
+
+# reproductibility
+determinism:
+  seed: 4294967295
+  cudnn_backend: false
+  use_deterministic_algorithms: false
+  warn_only: true
+
+# Training
+training:
+  supervision:
+    freeze_encoder: true
+    deep_contributions: [1, 1, 1] # reverse indexed depth => output should be last [avg_deloss, max_loss, dice_loss]
+    weighted: false
+  augs:
+    mixup:
+      add: false
+      beta: 5.0
+      p: 0.0
+    cutmix:
+      beta: 5.0
+      dims: [-2, -1]
+      p: 0.0
+    smoothing: 0.0
+  sub_batch:
+    train: -1
+    eval: 4
+  ckpt_path: null
+
+# Optimizers
+optimizer:
+  name: SGD
+  lr: 0.1
+  weight_decay: 0.0
+  sgd:
+    lr: "${optimizer.lr}"
+    sgd_momentum: 0.
+    sgd_nesterov: false
+    weight_decay: "${optimizer.weight_decay}"
+  adam:
+    lr: "${optimizer.lr}"
+    weight_decay: "${optimizer.weight_decay}"
+  adamw_args:
+    lr: "${optimizer.lr}"
+    weight_decay: "${optimizer.weight_decay}"
+  adamwplus_args:
+    lr: "${optimizer.lr}"
+    weight_decay: "${optimizer.weight_decay}"
+
+# Optmization
+deep_loss:
+    include_background: true
+    to_onehot_y: true
+    gamma: 2.,
+    alpha: null,
+    weight: [14e3, 11.2e4, 9e5]
+    reduction: mean
+    use_softmax: true
+    num_classes: "$transforms.train.num_classes"
+    lambda_max: 0.25
+    lambda_avg: 0.25
+    weighted: true
+    levels: 3
+    max_pool:
+      kernel_size: 4
+      stride: 4
+      padding: 0
+      dilation: 1
+    avg_pool:
+      kernel_size: 4
+      stride: 4
+      padding: 0
+
+dice:
+  include_background: true
+  to_onehot_y: true
+  sigmoid: false
+  softmax: true
+  other_act: null
+  squared_pred: false
+  jaccard: false
+  reduction: none
+  smooth_nr: 1e-10
+  smooth_dr: 1e-10
+  batch: false
+  weight: null
+
+w_init:
+  dist: normal
+  a: 0.1
+  mode: fan_out
+  nonlinearity: leaky_relu
+
+# Profiler
+profiler:
+  accelerator: "xla"
+  xla:
+    profiler_port: 9001
+  torch:
+    emit_nvtx: true
+    prof_filename: prof_filename.txt
+
+# Scheduler
+scheduler:
+  name: multistep
+  eta_min: 1e-5
+  warmup: 100
+  restart_scheduler: true
+
+  multistep:
+    milestones: 2
+    gamma: "${scheduler.eta_min}"
+
+  cosine:
+    T_max: 100
+    eta_min: "${scheduler.eta_min}"
+    last_epoch: -1
+
+  cosine_wr:
+    T_0: 50
+    T_mult: 1
+    eta_min: "${scheduler.eta_min}"
+    last_epoch: -1
+
+  linear:
+    start_factor: "${scheduler.eta_min}"
+    end_factor: 1.0
+    total_iters: "${scheduler.warmup}"
+
+# Trainer
+trainers:
+  callable:
+    logger: "${eval: not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run}}"
+    Callbacks: "${eval: True if not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run} else None}"
+    profiler: "${eval: None if not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run} else None}"
+  lightning:
+    accumulate_grad_batches: 1
+    gradient_clip_algorithm: norm
+    gradient_clip_val: 1
+    precision: "bf16-true"
+    sync_batchnorm: true
+    accelerator: "tpu"
+    devices: auto
+    num_nodes: 1
+    strategy: auto
+    use_distributed_sampler: true
+    reload_dataloaders_every_n_epochs: 0
+    benchmark: null
+    barebones: false
+    detect_anomaly: false
+    fast_dev_run: false
+    num_sanity_val_steps: 0
+    overfit_batches: 0
+    plugins: null
+    default_root_dir: "${save_dir}"
+    enable_checkpointing: true
+    enable_model_summary: false
+    enable_progress_bar: true
+    log_every_n_steps: 2
+    model_registry: null
+    check_val_every_n_epoch: null
+    inference_mode: true
+    limit_predict_batches: 1.0
+    limit_test_batches: 1.0
+    limit_train_batches: 1.0
+    limit_val_batches: 1.0
+    max_epochs: 1000
+    min_epochs: null
+    max_steps: -1
+    max_time: null
+    min_steps: null
+    val_check_interval: 96
+    deterministic: "warn"
+
+save_dir: "/kaggle/working"
