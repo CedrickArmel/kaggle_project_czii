@@ -19,16 +19,19 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-'''
+
 import os
 from typing import Any
 
+import lightning.pytorch as L
 import torch
+from monai.losses import DiceLoss
 from omegaconf import DictConfig
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics.utilities import dim_zero_cat
 
+from cryoetpicker.losses import DeepLoss
 from cryoetpicker.metrics import Score
 from cryoetpicker.processings import post_process_pipeline
 from cryoetpicker.utils import get_optimizer, get_scheduler, initialize_weights
@@ -37,57 +40,93 @@ from .augmentation import CutmixSimple, Mixup
 from .flexible_unet import FxFlexibleUNet
 
 
-
-
-
 class LightningFxUnet3D(L.LightningModule):
-    """Lightning wrapper for PyTorch models"""
-    def __init__(self, cfg: "DictConfig", module: "torch.nn.Module") -> None:
-        """_summary_
+    """Feature Extended Flexible 3D Unet Lightning Module"""
 
-        Args:
-            cfg (DictConfig): Project configurations entrypoint.
-            module (torch.nn.Module): PyTorch model to wrapp.
-        """
+    def __init__(self, cfg: "DictConfig") -> None:
         super().__init__()
         self.cfg = cfg
         self.validation_step_outputs: "list[torch.Tensor]" = []
         self.backbone = FxFlexibleUNet(**cfg.models.flexible)
         self.mixup = Mixup(**cfg.training.augs.mixup)
         self.cutmix = CutmixSimple(**cfg.training.augs.cutmix)
+        self.deep_loss = DeepLoss(**cfg.deep_loss)
+        self.dice = DiceLoss(**cfg.dice)
+        self.weighted = cfg.training.supervision.weighted
+        self.train_sub_batch = cfg.training.sub_batch.train
+        self.eval_sub_batch = cfg.training.sub_batch.eval
+        deep_contibutions = torch.tensor(
+            list(cfg.training.supervision.deep_contributions)
+        )
+        self.register_buffer("deep_contibutions", deep_contibutions)
+        self.deep_contibutions: "torch.Tensor"
+        self.particle_weight: "torch.Tensor"
 
+    def forward(self, batch: "dict[str, Any]") -> "dict[str, Any]":
+        """Perform a forward pass through the model."""
+        bs = self.train_sub_batch if self.training else self.eval_sub_batch
+        has_target = "target" in batch
+        full_size = batch["input"].shape[0]
+        device: "torch.device" = batch["input"].device
+        location = batch["input"].meta["location"]
 
+        target: "torch.Tensor" = torch.empty(
+            0, device=device
+        )  # better than empty list because of XLA compilation performance
+        all_outs = []
+        outputs = {}
 
+        for i in range(0, full_size, bs if bs != -1 else full_size):
+            x: "torch.Tensor " = batch["input"][i : i + bs].float()
+            if self.training:  # we assume a target is always present during training
+                outs: "list[torch.Tensor]" = self.backbone(x)
+                logits: "torch.Tensor" = outs[-1]
+                all_outs.append(outs)
+            else:
+                with torch.no_grad():
+                    outs = self.backbone(x)
+                    logits = outs[-1]
+                    all_outs.append(logits)
 
+        target = batch["target"].float()
 
+        if self.training:
+            outs = [
+                torch.cat([out[i] for out in all_outs]) for i in range(len(all_outs[0]))
+            ]
+            logits = outs[-1]
 
+            loss = self.deep_contibutions[-1] * self.deep_loss(
+                input=logits, target=target, depth=-1
+            )
 
+            for i in range(2, self.deep_loss.depth + 1):
+                if self.deep_contibutions[-i] > 0:
+                    x = outs[-i]
+                    loss += self.deep_contibutions[-i] * self.deep_loss(
+                        input=x, target=target, depth=-i
+                    )
 
+            if self.weighted:
+                loss /= self.deep_contibutions.sum()
 
+        else:
+            with torch.no_grad():
+                # For inference, we concatenate all outputs
+                logits = torch.cat(all_outs, dim=0)
+                if has_target:
+                    loss = self.deep_loss(input=logits, target=target, depth=-1)
 
+        if has_target:
+            outputs["loss"] = loss
+            outputs["dice"] = self.dice(logits, target)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def forward(self, batch: "dict[str, Any]") -> "torch.Tensor":
-        return self.module(batch)
+        if not self.training:
+            outputs["logits"] = logits
+            outputs["location"] = location
+            if "id" in batch:
+                outputs["id"] = batch["id"]
+        return outputs
 
     def setup(self, stage: "str") -> "None":
         """Called at the beginning of each stage in oder to build model dynamically."""
@@ -100,12 +139,17 @@ class LightningFxUnet3D(L.LightningModule):
         self.training_steps = stepping_batches * max_epochs * world_size
 
         if stage == "fit":
-            self.module.backbone.decoder = self.module.backbone.decoder.apply(
-                lambda m: initialize_weights(module=m, **self.cfg.w_init)
-            )
             if freeze_encoder:
-                for param in self.module.backbone.encoder.parameters():
+                self.backbone.decoder = self.backbone.decoder.apply(
+                    lambda m: initialize_weights(module=m, **self.cfg.w_init)
+                )
+
+                for param in self.backbone.encoder.parameters():
                     param.requires_grad = False
+            else:
+                self.backbone = self.backbone.apply(
+                    lambda m: initialize_weights(module=m, **self.cfg.w_init)
+                )
 
     def configure_optimizers(self) -> "dict[str, Any] | Optimizer":
         """Return the optimizer and an optionnal lr_scheduler"""
@@ -135,7 +179,7 @@ class LightningFxUnet3D(L.LightningModule):
         log_dict: "dict[str, torch.Tensor]" = dict(
             train_loss=loss,
             train_bg_dice=dice[0],
-            train_fg_dice=dice[1],
+            train_fg_dice=dice[1:].mean(),
         )
         self.log_dict(
             log_dict,
@@ -155,11 +199,11 @@ class LightningFxUnet3D(L.LightningModule):
         output_dict = self(batch)
         loss: "torch.Tensor" = output_dict["loss"]
         dice: "torch.Tensor" = output_dict["dice"].mean(dim=0).squeeze()
-        preds: "torch.Tensor" = post_process_pipeline(self.cfg, output_dict)
+        preds: "torch.Tensor" = post_process_pipeline(input=output_dict, **self.cfg.pp)
         log_dict: "dict[str, torch.Tensor]" = dict(
             val_loss=loss,
             val_bg_dice=dice[0],
-            val_fg_dice=dice[1],
+            val_fg_dice=dice[1:].mean(),
         )
         self.validation_step_outputs.append(preds)
         self.score_metric.update(preds, zyx)
@@ -273,14 +317,3 @@ class LightningFxUnet3D(L.LightningModule):
             prog_bar=False,
             sync_dist=True,
         )
-'''
-
-
-import lightning.pytorch as L
-
-
-class LightningFxUnet3D(L.LightningModule):
-    def __init__(
-        self,
-    ):
-        pass

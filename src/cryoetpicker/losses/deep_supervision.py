@@ -31,25 +31,25 @@ from .pooling import LocalFocalLoss
 class DeepLoss(torch.nn.Module):
     def __init__(
         self,
-        max_pool_args: "dict[str, Any]",
-        avg_pool_args: "dict[str, Any]",
+        max_pool: "dict[str, Any]",
+        avg_pool: "dict[str, Any]",
         num_classes: "int",
         include_background: "bool" = True,
         to_onehot_y: "bool" = False,
         gamma: "float" = 2.0,
         alpha: "float | None" = None,
-        weight: "Sequence[float] | float | int | None" = None,
+        weight: "list[float] | float | int | None" = None,
         reduction: "LossReduction | str" = LossReduction.MEAN,
         use_softmax: "bool" = False,
         lambda_max: float = 0.25,
         lambda_avg: float = 0.25,
         weighted: "bool" = True,
-        levels: "int" = 3,
+        depth: "int" = 3,
     ):
 
         losses = []
 
-        for i in range(levels):
+        for i in range(depth):
             if isinstance(weight, (int, float)):
                 level_weight = (
                     [1] + [weight] * (num_classes - 1) if num_classes > 1 else None
@@ -63,8 +63,8 @@ class DeepLoss(torch.nn.Module):
 
             losses.append(
                 LocalFocalLoss(
-                    max_pool_args=max_pool_args,
-                    avg_pool_args=avg_pool_args,
+                    max_pool=max_pool,
+                    avg_pool=avg_pool,
                     include_background=include_background,
                     to_onehot_y=to_onehot_y,
                     gamma=gamma,
@@ -79,6 +79,7 @@ class DeepLoss(torch.nn.Module):
             )
 
         self.level_losses = torch.nn.ModuleList(losses)
+        self.depth = depth
 
-    def forward(self, input: "torch.Tensor", target: "torch.Tensor", level: "int"):
-        return self.level_losses[level](input=input, target=target)
+    def forward(self, input: "torch.Tensor", target: "torch.Tensor", depth: "int"):
+        return self.level_losses[depth](input=input, target=target)

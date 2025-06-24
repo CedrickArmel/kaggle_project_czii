@@ -71,6 +71,7 @@ metrics:
 # Post-Processing
 pp:
   nms_radius: 16
+  num_classes: "$transforms.train.num_classes"
   topk: 200
   roi_size: "$transforms.base.roi_size"
   tomo_size: "${eval: [int(192/(2^int($copick.base.resolution))), int(640/(2^int($copick.base.resolution))), int(640/(2^int($copick.base.resolution)))]"
@@ -103,7 +104,7 @@ models:
   flexible:
     spatial_dims: 3
     in_channels: 1
-    out_channels: 2  # 2 classes: background and motor
+    out_channels: "$transforms.train.num_classes" # 2 classes: background and motor
     backbone: resnet34
     pretrained: true
     upsample: "deconv"
@@ -121,9 +122,8 @@ determinism:
 training:
   supervision:
     freeze_encoder: true
-    deep_supervision: true
-    loss_contributions: [1, 1, 1] # [avg_loss, max_loss, dice_loss]
-    weighted_loss: false
+    deep_contributions: [1, 1, 1] # reverse indexed depth => output should be last [avg_deloss, max_loss, dice_loss]
+    weighted: false
   augs:
     mixup:
       add: false
@@ -159,45 +159,29 @@ optimizer:
     lr: "${optimizer.lr}"
     weight_decay: "${optimizer.weight_decay}"
 
-# TODO: refactor optimization args
 # Optmization
-loss:
-  include_background: true
-  to_onehot_y: true
-  gamma: 2.
-  alpha: null
-  weight: [1, 9e5, 9e5, 9e5, 9e5, 9e5, 9e5]
-  reduction: mean
-  use_softmax: true
-
-max_loss:
-  loss:
+deep_loss:
     include_background: true
     to_onehot_y: true
-    gamma: 2.
-    alpha: null
-    weight: [1, 75]
+    gamma: 2.,
+    alpha: null,
+    weight: [14e3, 11.2e4, 9e5]
     reduction: mean
     use_softmax: true
-  pooling:
-    kernel_size: 4
-    stride: 4
-    padding: 0
-    dilation: 1
-
-avg_loss:
-  loss:
-    include_background: true
-    to_onehot_y: true
-    gamma: 2.
-    alpha: null
-    weight: [1, 6e2]
-    reduction: mean
-    use_softmax: true
-  pooling:
-    kernel_size: 2
-    stride: 2
-    padding: 0
+    num_classes: "$transforms.train.num_classes"
+    lambda_max: 0.25
+    lambda_avg: 0.25
+    weighted: true
+    levels: 3
+    max_pool:
+      kernel_size: 4
+      stride: 4
+      padding: 0
+      dilation: 1
+    avg_pool:
+      kernel_size: 4
+      stride: 4
+      padding: 0
 
 dice:
   include_background: true

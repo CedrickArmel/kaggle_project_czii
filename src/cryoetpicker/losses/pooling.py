@@ -23,7 +23,6 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
 from typing import Any
 
 import torch
@@ -38,14 +37,14 @@ from .focal_loss import FocalLoss, sigmoid_focal_loss, softmax_focal_loss
 class AvgPool3DLoss(_Loss):
     def __init__(
         self,
-        kernel_size: "Sequence[int] | int",
-        stride: "Sequence[int] | int",
-        padding: "Sequence[int] | int",
+        kernel_size: "list[int] | int",
+        stride: "list[int] | int",
+        padding: "list[int] | int",
         include_background: "bool" = True,
         to_onehot_y: "bool" = False,
         gamma: "float" = 2.0,
         alpha: "float | None" = None,
-        weight: "Sequence[float] | float | int | None" = None,
+        weight: "list[float] | float | int | None" = None,
         reduction: "LossReduction | str" = LossReduction.MEAN,
         use_softmax: "bool" = False,
     ):
@@ -63,12 +62,14 @@ class AvgPool3DLoss(_Loss):
         self.gamma = gamma
         self.alpha = alpha
         self.use_softmax = use_softmax
-        weight = torch.tensor(weight) if weight is not None else None
-        if weight is not None and weight.min() < 0:
+        class_weight: "torch.Tensor | None" = (
+            torch.tensor(weight) if weight is not None else None
+        )
+        if class_weight is not None and class_weight.min() < 0:
             raise ValueError(
                 "the value/values of the `weight` should be no less than 0."
             )
-        self.register_buffer("class_weight", weight)
+        self.register_buffer("class_weight", class_weight)
         self.class_weight: "torch.Tensor | None"
 
     def forward(self, input: "torch.Tensor", target: "torch.Tensor") -> "torch.Tensor":
@@ -92,7 +93,9 @@ class AvgPool3DLoss(_Loss):
                 input = input[:, 1:]
 
         if target.shape != input.shape:
-            target = F.adaptive_max_pool3d(target, input.shape[-3:])
+            raise ValueError(
+                f"ground truth has different shape ({target.shape}) from input ({input.shape})"
+            )
 
         loss: "torch.Tensor | None" = None
         input = input.float()
@@ -121,7 +124,7 @@ class AvgPool3DLoss(_Loss):
         else:
             loss = sigmoid_focal_loss(input, target, self.gamma, self.alpha)
 
-        class_weight: "torch.Tensor" = self.class_weight
+        class_weight = self.class_weight
         num_of_classes = target.shape[1]
 
         if class_weight is not None and num_of_classes != 1:
@@ -154,15 +157,15 @@ class AvgPool3DLoss(_Loss):
 class MaxPool3DLoss(_Loss):
     def __init__(
         self,
-        kernel_size: "Sequence[int] | int",
-        stride: "Sequence[int] | int",
-        padding: "Sequence[int] | int",
-        dilation: "Sequence[int] | int",
+        kernel_size: "list[int] | int",
+        stride: "list[int] | int",
+        padding: "list[int] | int",
+        dilation: "list[int] | int",
         include_background: "bool" = True,
         to_onehot_y: "bool" = False,
         gamma: "float" = 2.0,
         alpha: "float | None" = None,
-        weight: "Sequence[float] | float | int | None" = None,
+        weight: "list[float] | float | int | None" = None,
         reduction: "LossReduction | str" = LossReduction.MEAN,
         use_softmax: "bool" = False,
     ):
@@ -180,12 +183,14 @@ class MaxPool3DLoss(_Loss):
         self.gamma = gamma
         self.alpha = alpha
         self.use_softmax = use_softmax
-        weight = torch.tensor(weight) if weight is not None else None
-        if weight is not None and weight.min() < 0:
+        class_weight: "torch.Tensor | None" = (
+            torch.tensor(weight) if weight is not None else None
+        )
+        if class_weight is not None and class_weight.min() < 0:
             raise ValueError(
                 "the value/values of the `weight` should be no less than 0."
             )
-        self.register_buffer("class_weight", weight)
+        self.register_buffer("class_weight", class_weight)
         self.class_weight: "torch.Tensor | None"
 
     def forward(self, input: "torch.Tensor", target: "torch.Tensor") -> "torch.Tensor":
@@ -209,7 +214,9 @@ class MaxPool3DLoss(_Loss):
                 input = input[:, 1:]
 
         if target.shape != input.shape:
-            target = F.adaptive_max_pool3d(target, input.shape[-3:])
+            raise ValueError(
+                f"ground truth has different shape ({target.shape}) from input ({input.shape})"
+            )
 
         loss: "torch.Tensor | None" = None
         input = input.float()
@@ -238,7 +245,7 @@ class MaxPool3DLoss(_Loss):
         else:
             loss = sigmoid_focal_loss(input, target, self.gamma, self.alpha)
 
-        class_weight: "torch.Tensor" = self.class_weight
+        class_weight = self.class_weight
         num_of_classes = target.shape[1]
 
         if class_weight is not None and num_of_classes != 1:
@@ -271,13 +278,13 @@ class MaxPool3DLoss(_Loss):
 class LocalFocalLoss(_Loss):
     def __init__(
         self,
-        max_pool_args: "dict[str, Any]",
-        avg_pool_args: "dict[str, Any]",
+        max_pool: "dict[str, Any]",
+        avg_pool: "dict[str, Any]",
         include_background: "bool" = True,
         to_onehot_y: "bool" = False,
         gamma: "float" = 2.0,
         alpha: "float | None" = None,
-        weight: "Sequence[float] | float | int | None" = None,
+        weight: "list[float] | float | int | None" = None,
         reduction: "LossReduction | str" = LossReduction.MEAN,
         use_softmax: "bool" = False,
         lambda_max: float = 0.25,
@@ -285,6 +292,9 @@ class LocalFocalLoss(_Loss):
         weighted: "bool" = True,
     ):
         super().__init__()
+        if reduction not in ["mean", "sum"]:
+            raise ValueError("`reduction` must be mean or sum")
+
         self.focal = FocalLoss(
             include_background=include_background,
             to_onehot_y=False,
@@ -303,7 +313,7 @@ class LocalFocalLoss(_Loss):
             weight=weight,
             reduction=reduction,
             use_softmax=use_softmax,
-            **max_pool_args,
+            **max_pool,
         )
 
         self.avg_loss = AvgPool3DLoss(
@@ -314,7 +324,7 @@ class LocalFocalLoss(_Loss):
             weight=weight,
             reduction=reduction,
             use_softmax=use_softmax,
-            **avg_pool_args,
+            **avg_pool,
         )
 
         if lambda_max < 0.0:
@@ -339,6 +349,17 @@ class LocalFocalLoss(_Loss):
                 "number of channels for target is neither 1 (without one-hot encoding) nor the same as input, "
                 f"got shape {input.shape} and {target.shape}."
             )
+
+        if self.to_onehot_y:
+            n_pred_ch = input.shape[1]
+            if n_pred_ch == 1:
+                warnings.warn("single channel prediction, `to_onehot_y=True` ignored.")
+            else:
+                target = one_hot(target, num_classes=n_pred_ch)
+
+        if input.shape[-3:] != target.shape[-3:]:
+            target = F.adaptive_max_pool3d(target, input.shape[-3:])
+
         loss = self.focal(input, target)
         total_weight = 1.0
         if self.lambda_max > 0:

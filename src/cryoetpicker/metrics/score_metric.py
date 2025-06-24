@@ -41,8 +41,8 @@ class Score(Metric):
         super().__init__(**kwargs)
         self.beta = beta
         self.multiplier = multiplier
-        self.radius = {"0": 60, "1": 65, "2": 90, "3": 150, "4": 130, "5": 135}
-        self.weights = {"0": 1, "1": 0, "2": 2, "3": 1, "4": 2, "5": 1}
+        self.radius = {"1": 60, "2": 65, "3": 90, "4": 150, "5": 130, "6": 135}
+        self.weights = {"1": 1, "2": 0, "3": 2, "4": 1, "5": 2, "6": 1}
         self.add_state(name="preds", default=[], dist_reduce_fx="cat")
         self.add_state(name="targets", default=[], dist_reduce_fx="cat")
         self.preds: "list[torch.Tensor]"
