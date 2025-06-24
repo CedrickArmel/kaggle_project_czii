@@ -25,7 +25,9 @@ Derived from:
 https://www.kaggle.com/code/metric/czi-cryoet-84969?scriptVersionId=208227222&cellId=1
 """
 
+import numpy as np
 import torch
+from numpy.typing import NDArray
 from scipy.spatial import KDTree
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
@@ -56,8 +58,17 @@ class Score(Metric):
         preds: "torch.Tensor" = dim_zero_cat(x=self.preds)  # z, y, x, label, run_id
         targets: "torch.Tensor" = dim_zero_cat(x=self.targets)
         targets = torch.unique(targets, dim=0)
-        score = self.score(preds=preds, targets=targets)
-        return dict(score=score)
+        ths: "NDArray" = np.arange(start=0, stop=1.0, step=0.001)
+        scores = []
+        for t in ths:
+            select = preds[:, -1] > t
+            preds = preds[select][:, :-1]
+            score = self.score(preds=preds, targets=targets)
+            scores += [score]
+        best_idx = int(np.argmax(a=scores))
+        thd = float(ths[best_idx])
+        fbeta = float(scores[best_idx])
+        return dict(score=fbeta, thd=thd)
 
     def compute_metrics(
         self, candidates: "torch.Tensor", references: "torch.Tensor", radius: "float"
