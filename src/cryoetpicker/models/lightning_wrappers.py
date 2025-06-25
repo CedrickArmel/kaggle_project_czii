@@ -60,24 +60,29 @@ class LightningFxUnet3D(L.LightningModule):
         )
         self.register_buffer("deep_contibutions", deep_contibutions)
         self.deep_contibutions: "torch.Tensor"
-        self.particle_weight: "torch.Tensor"
 
     def forward(self, batch: "dict[str, Any]") -> "dict[str, Any]":
         """Perform a forward pass through the model."""
         bs = self.train_sub_batch if self.training else self.eval_sub_batch
         has_target = "target" in batch
         full_size = batch["input"].shape[0]
-        device: "torch.device" = batch["input"].device
-        location = batch["input"].meta["location"]
 
-        target: "torch.Tensor" = torch.empty(
-            0, device=device
-        )  # better than empty list because of XLA compilation performance
+        if has_target:
+            target: "torch.Tensor" = batch["target"].as_tensor().float()
+            if target.ndim > 5:
+                target = target.squeeze(dim=0)
+
         all_outs = []
         outputs = {}
 
         for i in range(0, full_size, bs if bs != -1 else full_size):
-            x: "torch.Tensor " = batch["input"][i : i + bs].float()
+            x: "torch.Tensor " = (
+                batch["input"][i : i + (bs if bs != -1 else full_size)]
+                .as_tensor()
+                .float()
+            )
+            if x.ndim > 5:
+                x = x.squeeze(dim=0)
             if self.training:  # we assume a target is always present during training
                 outs: "list[torch.Tensor]" = self.backbone(x)
                 logits: "torch.Tensor" = outs[-1]
@@ -87,8 +92,6 @@ class LightningFxUnet3D(L.LightningModule):
                     outs = self.backbone(x)
                     logits = outs[-1]
                     all_outs.append(logits)
-
-        target = batch["target"].float()
 
         if self.training:
             outs = [
@@ -123,14 +126,14 @@ class LightningFxUnet3D(L.LightningModule):
 
         if not self.training:
             outputs["logits"] = logits
-            outputs["location"] = location
+            outputs["location"] = batch["input"].meta["location"]
             if "id" in batch:
                 outputs["id"] = batch["id"]
         return outputs
 
     def setup(self, stage: "str") -> "None":
         """Called at the beginning of each stage in oder to build model dynamically."""
-        freeze_encoder = self.cfg.training.optim.freeze_encoder
+        freeze_encoder = self.cfg.training.supervision.freeze_encoder
         stepping_batches = self.trainer.estimated_stepping_batches
         max_epochs = self.cfg.trainers.lightning.max_epochs
         world_size = self.trainer.world_size
@@ -153,7 +156,7 @@ class LightningFxUnet3D(L.LightningModule):
 
     def configure_optimizers(self) -> "dict[str, Any] | Optimizer":
         """Return the optimizer and an optionnal lr_scheduler"""
-        optimizer: "Optimizer" = get_optimizer(self.model, **self.cfg.optimizer)
+        optimizer: "Optimizer" = get_optimizer(self.backbone, **self.cfg.optimizer)
         scheduler: "LRScheduler | None" = get_scheduler(
             optimizer=optimizer,
             training_steps=self.training_steps,
@@ -239,7 +242,7 @@ class LightningFxUnet3D(L.LightningModule):
         else:
             total_norm = torch.norm(
                 torch.cat([p.detach().view(-1) for p in params]),
-                p=self.cfg.grad_norm_type,
+                p=2,
             )
         self.log(
             "weight_norm",
@@ -268,7 +271,7 @@ class LightningFxUnet3D(L.LightningModule):
         torch.save(
             preds,
             os.path.join(
-                self.cfg.default_root_dir,
+                self.cfg.trainers.lightning.default_root_dir,
                 f"val_epoch_{self.current_epoch}_end_step{self.global_step}_rank{self.global_rank}.pt",
             ),
         )
@@ -288,7 +291,7 @@ class LightningFxUnet3D(L.LightningModule):
         else:
             total_norm_before = torch.norm(
                 torch.cat([g.detach().view(-1) for g in grads]),
-                p=self.cfg.grad_norm_type,
+                p=2,
             )
 
         self.clip_gradients(
@@ -302,7 +305,7 @@ class LightningFxUnet3D(L.LightningModule):
         else:
             total_norm_after = torch.norm(
                 torch.cat([g.detach().view(-1) for g in grads]),
-                p=self.cfg.grad_norm_type,
+                p=2,
             )
 
         log_dict: "dict[str, torch.Tensor]" = dict(

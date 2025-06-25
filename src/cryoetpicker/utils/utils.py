@@ -87,7 +87,7 @@ def get_optimizer(
 ) -> "optim.Optimizer | None":
 
     params_ = model.parameters()
-    args = kwargs[name]
+    args = kwargs[name.lower()]
 
     if name == "Adam":
         optimizer: "optim.Optimizer" = optim.Adam(
@@ -171,7 +171,7 @@ def get_scheduler(
         steps: "int" = training_steps - warmup
         milestones = range(1, steps, (steps // args.milestones))
         scheduler = MultiStepLR(
-            optimizer=optimizer, milestones=milestones, gaamma=args.gamma
+            optimizer=optimizer, milestones=milestones, gamma=args.gamma
         )
 
     elif name == "cosine":

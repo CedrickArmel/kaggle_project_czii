@@ -78,7 +78,7 @@ def train(cfg: "DictConfig") -> "None":
         if cfg.trainers.callable.logger
         else cfg.trainers.callable.logger
     )
-    if logger is not None:
+    if logger:
         print("Logger log_dir : ", logger.log_dir)
     else:
         print("No logger registred.")
@@ -89,7 +89,7 @@ def train(cfg: "DictConfig") -> "None":
         else cfg.trainers.callable.callbacks
     )
     trainer = get_lightning_trainer(
-        logger=logger, callbacks=callbacks, profiler=profiler, **cfg.trainers
+        logger=logger, callbacks=callbacks, profiler=profiler, **cfg.trainers.lightning
     )
     trainer.fit(
         model,

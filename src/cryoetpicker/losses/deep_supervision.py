@@ -46,7 +46,7 @@ class DeepLoss(torch.nn.Module):
         weighted: "bool" = True,
         depth: "int" = 3,
     ):
-
+        super().__init__()
         losses = []
 
         for i in range(depth):

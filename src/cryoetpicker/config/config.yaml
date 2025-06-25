@@ -58,12 +58,10 @@ metrics:
     super:
       compute_on_cpu: true
       dist_sync_on_step: false
-      process_group: null
       dist_sync_fn: null
       distributed_available_fn: null
       sync_on_compute: true
       compute_with_cache: true
-      dist_reduce_fx: "cat"
     init:
       beta: 2.0
       multiplier: 1.0
@@ -71,10 +69,10 @@ metrics:
 # Post-Processing
 pp:
   nms_radius: 16
-  num_classes: "$transforms.train.num_classes"
+  num_classes: "${transforms.train.num_classes}"
   topk: 200
-  roi_size: "$transforms.base.roi_size"
-  tomo_size: "${eval: [int(192/(2^int($copick.base.resolution))), int(640/(2^int($copick.base.resolution))), int(640/(2^int($copick.base.resolution)))]"
+  roi_size: "${transforms.base.roi_size}"
+  tomo_size: [184, 630, 630]
   interpolation: "nearest-exact"
   align_corners: null
 
@@ -104,11 +102,11 @@ models:
   flexible:
     spatial_dims: 3
     in_channels: 1
-    out_channels: "$transforms.train.num_classes" # 2 classes: background and motor
+    out_channels: "${transforms.train.num_classes}" # 2 classes: background and motor
     backbone: resnet34
     pretrained: true
     upsample: "deconv"
-    decoder_channels: [256, 128]
+    decoder_channels: [256, 128, 64, 32, 16]
     skip_connect: 4
 
 # reproductibility
@@ -136,7 +134,7 @@ training:
     smoothing: 0.0
   sub_batch:
     train: -1
-    eval: 4
+    eval: 1
   ckpt_path: null
 
 # Optimizers
@@ -146,16 +144,16 @@ optimizer:
   weight_decay: 0.0
   sgd:
     lr: "${optimizer.lr}"
-    sgd_momentum: 0.
-    sgd_nesterov: false
+    momentum: 0.
+    nesterov: false
     weight_decay: "${optimizer.weight_decay}"
   adam:
     lr: "${optimizer.lr}"
     weight_decay: "${optimizer.weight_decay}"
-  adamw_args:
+  adamw:
     lr: "${optimizer.lr}"
     weight_decay: "${optimizer.weight_decay}"
-  adamwplus_args:
+  adamw_plus:
     lr: "${optimizer.lr}"
     weight_decay: "${optimizer.weight_decay}"
 
@@ -163,16 +161,16 @@ optimizer:
 deep_loss:
     include_background: true
     to_onehot_y: true
-    gamma: 2.,
-    alpha: null,
+    gamma: 2.
+    alpha: null
     weight: [14e3, 11.2e4, 9e5]
     reduction: mean
     use_softmax: true
-    num_classes: "$transforms.train.num_classes"
+    num_classes: "${transforms.train.num_classes}"
     lambda_max: 0.25
     lambda_avg: 0.25
     weighted: true
-    levels: 3
+    depth: 3
     max_pool:
       kernel_size: 4
       stride: 4
@@ -207,7 +205,7 @@ w_init:
 profiler:
   accelerator: "xla"
   xla:
-    profiler_port: 9001
+    port: 9001
   torch:
     emit_nvtx: true
     prof_filename: prof_filename.txt
@@ -243,7 +241,7 @@ scheduler:
 trainers:
   callable:
     logger: "${eval: not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run}}"
-    Callbacks: "${eval: True if not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run} else None}"
+    callbacks: "${eval: True if not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run} else None}"
     profiler: "${eval: None if not ${trainers.lightning.barebones} and not ${trainers.lightning.fast_dev_run} else None}"
   lightning:
     accumulate_grad_batches: 1

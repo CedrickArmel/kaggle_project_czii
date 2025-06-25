@@ -335,6 +335,7 @@ class LocalFocalLoss(_Loss):
         self.lambda_max = lambda_max
         self.lambda_avg = lambda_avg
         self.to_onehot_y = to_onehot_y
+        self.weighted = weighted
 
     def forward(self, input: "torch.Tensor", target: "torch.Tensor") -> "torch.Tensor":
         if input.dim() != target.dim():
