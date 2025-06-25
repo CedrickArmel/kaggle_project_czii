@@ -118,9 +118,8 @@ def post_process_pipeline(
 
     device = img.device
     roi_size = torch.tensor(roi_size, device=device)
-
     locations: "torch.Tensor" = input["location"]
-    tomo_ids: "torch.Tensor" = torch.tensor(input["id"], device=device)
+    tomo_ids: "torch.Tensor" = input["id"]
 
     out_size = get_output_size(img, locations, roi_size, device)
     rec_img = reconstruct(

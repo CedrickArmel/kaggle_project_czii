@@ -81,8 +81,6 @@ def get_data_loader(dataset, seed: "int", **kwargs) -> "DataLoader":
 def get_optimizer(
     model: "torch.nn.Module",
     name: "str" = "SGD",
-    lr: "float" = 1e-3,
-    weight_decay: "float" = 0.0,
     **kwargs,
 ) -> "optim.Optimizer | None":
 
@@ -90,13 +88,13 @@ def get_optimizer(
     args = kwargs[name.lower()]
 
     if name == "Adam":
-        optimizer: "optim.Optimizer" = optim.Adam(
-            params_, lr=lr, weight_decay=weight_decay
-        )
+        optimizer: "optim.Optimizer" = optim.Adam(params_, **args)
 
     elif name == "AdamW_plus":
         nparams_ = list(model.named_parameters())
         no_decay = ["bias", "LayerNorm.bias"]
+        lr = args["lr"]
+        weight_decay = args["weight_decay"]
         params = [
             {
                 "params": [
@@ -120,10 +118,9 @@ def get_optimizer(
         optimizer = optim.AdamW(params, lr=lr)
 
     elif name == "AdamW":
-        optimizer = optim.AdamW(params_, lr=lr, weight_decay=weight_decay)
+        optimizer = optim.AdamW(params_, **args)
 
     elif name == "SGD":
-        args = kwargs["sgd"]
         optimizer = optim.SGD(params_, **args)
     return optimizer
 

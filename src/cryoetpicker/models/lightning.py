@@ -121,7 +121,7 @@ class LightningFxUnet3D(L.LightningModule):
 
         if has_target:
             outputs["loss"] = loss
-            outputs["dice"] = self.dice(logits, target)
+            outputs["dice"] = self.dice(logits, target).detach()
 
         if not self.training:
             outputs["logits"] = logits
@@ -137,7 +137,7 @@ class LightningFxUnet3D(L.LightningModule):
         max_epochs = self.cfg.trainers.lightning.max_epochs
         world_size = self.trainer.world_size
 
-        self.cfg.optimizer.lr *= self.trainer.world_size
+        self.cfg.lr *= self.trainer.world_size
         self.training_steps = stepping_batches * max_epochs * world_size
 
         if stage == "fit":
@@ -258,7 +258,6 @@ class LightningFxUnet3D(L.LightningModule):
         metrics = self.score_metric.compute()
         preds = dim_zero_cat(self.validation_step_outputs)
         preds = preds.cpu()
-        print(metrics)
         self.log_dict(
             metrics,
             on_step=False,
