@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 from .flexible_unet import FxFlexibleUNet
-from .lightning_wrappers import LightningFxUnet3D
-from .unet_supervisor import UNetSupervisor
+from .lightning import LightningFxUnet3D
 
-__all__ = ["FxFlexibleUNet", "LightningFxUnet3D", "UNetSupervisor"]
+__all__ = ["FxFlexibleUNet", "LightningFxUnet3D"]
