@@ -19,27 +19,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-# MIT License
-#
-# Copyright (c) 2024, Yebouet Cédrick-Armel
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
 
 from typing import Any
 
@@ -68,7 +47,7 @@ def get_output_size(
     output_size[0] = shapes.shape[0]
     output_size[1] = img.shape[1]
     output_size[2:] = s
-    return output_size.to(torch.int)
+    return output_size.int()
 
 
 def reconstruct(
@@ -127,7 +106,16 @@ def post_process_pipeline(
     align_corners: "bool | None" = None,
 ) -> "torch.Tensor":
     """Post-process the output of the model to get the final coordinates and confidence scores."""
+
     img: "torch.Tensor" = input["logits"].detach()
+    if img.shape[-3:] != torch.Size(roi_size):
+        img = F.interpolate(
+            img,
+            size=list(roi_size),
+            mode="trilinear",
+            align_corners=True,
+        )
+
     device = img.device
     roi_size = torch.tensor(roi_size, device=device)
 
@@ -135,7 +123,6 @@ def post_process_pipeline(
     tomo_ids: "torch.Tensor" = torch.tensor(input["id"], device=device)
 
     out_size = get_output_size(img, locations, roi_size, device)
-
     rec_img = reconstruct(
         img=img,
         locations=locations,
@@ -163,21 +150,21 @@ def post_process_pipeline(
     preds: "torch.Tensor" = rec_img.softmax(1)
     output: "torch.Tensor" = torch.empty(0, device=device)
     for i in range(1, num_classes):
-        preds = preds[:, i, :][None,]
-        nms: "torch.Tensor" = simple_nms(preds, nms_radius=nms_radius)  # (1,B, D, H, W)
+        pred = preds[:, i, :][None,]
+        nms: "torch.Tensor" = simple_nms(pred, nms_radius=nms_radius)  # (1,B, D, H, W)
         nms = nms.squeeze(dim=0)  # (B, D, H, W)
 
         flat_nms = nms.reshape(nms.shape[0], -1)  # (B, D*H*W)
         conf, indices = torch.topk(flat_nms, k=topk, dim=1)
-        zyx = torch.stack(torch.unravel_index(indices, nms.shape[-3:]), dim=-1).to(
-            torch.int
-        )  # (B, K, 3)
+        zyx = torch.stack(
+            torch.unravel_index(indices, nms.shape[-3:]), dim=-1
+        ).int()  # (B, K, 3)
 
         ids = torch.unique(tomo_ids.reshape(zyx.shape[0], -1), dim=1).expand(
             zyx.shape[0], topk
         )
 
-        conf = conf.to(torch.float32)
+        conf = conf.float()
 
         ids = ids.reshape(-1, 1)
         conf = conf.reshape(-1, 1)

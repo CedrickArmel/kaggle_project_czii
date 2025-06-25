@@ -21,7 +21,15 @@
 # SOFTWARE.
 
 from .deep_supervision import DeepLoss
+from .dice import DiceLoss
 from .focal_loss import FocalLoss
 from .pooling import AvgPool3DLoss, LocalFocalLoss, MaxPool3DLoss
 
-__all__ = ["AvgPool3DLoss", "DeepLoss", "FocalLoss", "LocalFocalLoss", "MaxPool3DLoss"]
+__all__ = [
+    "AvgPool3DLoss",
+    "DeepLoss",
+    "DiceLoss",
+    "FocalLoss",
+    "LocalFocalLoss",
+    "MaxPool3DLoss",
+]

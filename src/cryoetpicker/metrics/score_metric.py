@@ -38,6 +38,7 @@ class Score(Metric):
         self,
         beta: "float" = 2.0,
         multiplier: "float" = 1.0,
+        voxel_spacing: "float" = 10,
         **kwargs,
     ) -> "None":
         super().__init__(**kwargs)
@@ -45,6 +46,7 @@ class Score(Metric):
         self.multiplier = multiplier
         self.radius = {"1": 60, "2": 65, "3": 90, "4": 150, "5": 130, "6": 135}
         self.weights = {"1": 1, "2": 0, "3": 2, "4": 1, "5": 2, "6": 1}
+        self.voxel_spacing = voxel_spacing
         self.add_state(name="preds", default=[], dist_reduce_fx="cat")
         self.add_state(name="targets", default=[], dist_reduce_fx="cat")
         self.preds: "list[torch.Tensor]"
@@ -57,13 +59,13 @@ class Score(Metric):
     def compute(self) -> "dict[str, float]":
         preds: "torch.Tensor" = dim_zero_cat(x=self.preds)  # z, y, x, label, run_id
         targets: "torch.Tensor" = dim_zero_cat(x=self.targets)
-        targets = torch.unique(targets, dim=0)
+        targets = torch.unique(targets, dim=0).squeeze(dim=0)
         ths: "NDArray" = np.arange(start=0, stop=1.0, step=0.001)
         scores = []
         for t in ths:
             select = preds[:, -1] > t
-            preds = preds[select][:, :-1]
-            score = self.score(preds=preds, targets=targets)
+            tpreds = preds[select][:, :-1]
+            score = self.score(preds=tpreds, targets=targets)
             scores += [score]
         best_idx = int(np.argmax(a=scores))
         thd = float(ths[best_idx])
@@ -101,7 +103,7 @@ class Score(Metric):
 
         for run in runs:
             for particle in particles:
-                radius = self.radius[str(particle)]
+                radius = int(self.radius[str(particle)] / self.voxel_spacing)
                 select = (targets[:, -1] == run) & (targets[:, -2] == particle)
                 references = targets[select]
 
@@ -138,6 +140,6 @@ class Score(Metric):
                 if (precision + recall) > 0
                 else 0.0
             )
-            aggregate_fbeta += fbeta * self.weights.get(particle, 1.0)
+            aggregate_fbeta += fbeta * self.weights.get(str(particle), 1.0)
         aggregate_fbeta / sum(self.weights.values())
         return aggregate_fbeta

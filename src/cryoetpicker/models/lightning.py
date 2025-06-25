@@ -25,13 +25,12 @@ from typing import Any
 
 import lightning.pytorch as L
 import torch
-from monai.losses import DiceLoss
 from omegaconf import DictConfig
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torchmetrics.utilities import dim_zero_cat
 
-from cryoetpicker.losses import DeepLoss
+from cryoetpicker.losses import DeepLoss, DiceLoss
 from cryoetpicker.metrics import Score
 from cryoetpicker.processings import post_process_pipeline
 from cryoetpicker.utils import get_optimizer, get_scheduler, initialize_weights
@@ -259,7 +258,7 @@ class LightningFxUnet3D(L.LightningModule):
         metrics = self.score_metric.compute()
         preds = dim_zero_cat(self.validation_step_outputs)
         preds = preds.cpu()
-
+        print(metrics)
         self.log_dict(
             metrics,
             on_step=False,

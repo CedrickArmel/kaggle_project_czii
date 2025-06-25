@@ -122,7 +122,7 @@ class FxFlexibleUNet(nn.Module):  # type: ignore[misc]
         ),
         act: str | tuple[str, dict[str, Any]] = (
             "leakyrelu",
-            {"negative_slope": 0.1, "inplace": False},
+            {"negative_slope": 0.1, "inplace": True},
         ),
         dropout: float | tuple[str, dict[str, Any]] = 0.0,
         decoder_bias: bool = False,

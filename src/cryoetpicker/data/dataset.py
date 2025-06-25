@@ -107,7 +107,7 @@ def load_data(
                         y = int(np.ceil(point.location.y / voxel_spacing))
                         x = int(np.ceil(point.location.x / voxel_spacing))
                         segmentation[z, y, x] = int(obj.label)
-                        zyx_.append([z, y, x, obj.label, run_id])
+                        zyx_.append([z, y, x, int(obj.label), run_id])
             zyx: "NDArray" = np.array(zyx_)
             if run.name == fold:
                 eval_data.append(
