@@ -1,5 +1,6 @@
 # Aliases
 fold: TS_5_4
+ratios: null
 vxs: 10
 num_classes: 7
 lr: 0.1
@@ -25,6 +26,7 @@ max_epochs: 1000
 val_check_interval: null
 profiler_name: torch
 ckpt_path: null
+repeat: [1, 1]
 
 # Data Management
 copick:
@@ -38,7 +40,7 @@ copick:
     fold: "${fold}"
     user_id: copick
     session_id: "0"
-    repeat: [1, 1]
+    repeat: "${repeat}"
   test:
     mode: test
     path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_test.json
@@ -53,7 +55,7 @@ transforms:
     keys: ["input", "target"]
     num_samples: 4
     num_classes: "${num_classes}" # BG included
-    ratios: null
+    ratios: "${ratios}"
   validation:
     mode: validation
     keys: ["input", "target"]
