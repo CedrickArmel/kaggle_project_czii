@@ -141,5 +141,5 @@ class Score(Metric):
                 else 0.0
             )
             aggregate_fbeta += fbeta * self.weights.get(str(particle), 1.0)
-        aggregate_fbeta / sum(self.weights.values())
+        aggregate_fbeta /= sum(self.weights.values())
         return aggregate_fbeta

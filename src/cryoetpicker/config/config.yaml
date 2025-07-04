@@ -1,4 +1,5 @@
 # Aliases
+fold: TS_5_4
 vxs: 10
 num_classes: 7
 lr: 0.1
@@ -8,6 +9,7 @@ weight_decay: 0
 t0: 50
 tmult: 1
 batch_size: 2
+num_workers: 2
 persistent_workers: true
 prefetch_factor: 2
 every_n_epochs: "${eval: 1 if not ${callbacks.checkpoint.every_n_train_steps} and not ${callbacks.checkpoint.train_time_interval} else None}"
@@ -21,6 +23,8 @@ strategy: auto
 fast_dev_run: false
 max_epochs: 1000
 val_check_interval: null
+profiler_name: torch
+ckpt_path: null
 
 # Data Management
 copick:
@@ -31,7 +35,7 @@ copick:
   fit:
     mode: fit
     path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_fit.json
-    fold: TS_5_4
+    fold: "${fold}"
     user_id: copick
     session_id: "0"
     repeat: [1, 1]
@@ -60,8 +64,8 @@ transforms:
 # DataLoaders
 loader:
   train:
-    batch_size: 2
-    num_workers: 2
+    batch_size: "${batch_size}"
+    num_workers: "${num_workers}"
     shuffle: true
     drop_last: true
     persistent_workers: "${persistent_workers}"
@@ -95,7 +99,7 @@ metrics:
 pp:
   nms_radius: 16
   num_classes: "${transforms.train.num_classes}"
-  topk: 200
+  topk: 1000
   roi_size: "${transforms.base.roi_size}"
   tomo_size: [184, 630, 630]
   interpolation: "nearest-exact"
@@ -160,7 +164,7 @@ training:
   sub_batch:
     train: -1
     eval: 4
-  ckpt_path: null
+  ckpt_path: "${ckpt_path}"
 
 # Optimizers
 optimizer:
@@ -226,7 +230,7 @@ w_init:
 
 # Profiler
 profiler:
-  accelerator: "xla"
+  accelerator: "${profiler_name}"
   xla:
     port: 9001
   torch:
@@ -235,7 +239,7 @@ profiler:
 
 # Scheduler
 scheduler:
-  name: multistep
+  name: cosine_wr
   warmup: "${warmup}"
   restart_scheduler: true
   multistep:
