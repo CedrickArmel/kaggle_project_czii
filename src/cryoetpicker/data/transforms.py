@@ -62,4 +62,5 @@ def get_transforms(
             )
         ]
         compose = static + val
+    compose += [mt.FromMetaTensord(keys=["input", "target"], allow_missing_keys=True)]
     return mt.Compose(compose)

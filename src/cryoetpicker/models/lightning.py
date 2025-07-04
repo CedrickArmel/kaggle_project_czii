@@ -67,7 +67,7 @@ class LightningFxUnet3D(L.LightningModule):
         full_size = batch["input"].shape[0]
 
         if has_target:
-            target: "torch.Tensor" = batch["target"].as_tensor().float()
+            target: "torch.Tensor" = batch["target"].float()
             if target.ndim > 5:
                 target = target.squeeze(dim=0)
 
@@ -77,7 +77,6 @@ class LightningFxUnet3D(L.LightningModule):
         for i in range(0, full_size, bs if bs != -1 else full_size):
             x: "torch.Tensor " = (
                 batch["input"][i : i + (bs if bs != -1 else full_size)]
-                .as_tensor()
                 .float()
             )
             if x.ndim > 5:
@@ -125,9 +124,8 @@ class LightningFxUnet3D(L.LightningModule):
 
         if not self.training:
             outputs["logits"] = logits
-            outputs["location"] = batch["input"].meta["location"]
-            if "id" in batch:
-                outputs["id"] = batch["id"]
+            outputs["location"] = batch["input_meta_dict"]["location"]
+            outputs["id"] = batch["id"]
         return outputs
 
     def setup(self, stage: "str") -> "None":
