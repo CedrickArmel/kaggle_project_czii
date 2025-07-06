@@ -46,6 +46,11 @@ copick:
     path: /kaggle/working/kaggle_project_czii/src/cryoetpicker/config/copick_test.json
     repeat: [8, ]
 
+#Caching
+cache_ds:
+  train: true
+  eval: true
+
 # Data Transforms
 transforms:
   base:

@@ -28,10 +28,9 @@ from zoneinfo import ZoneInfo
 
 import hydra
 from lightning.pytorch.loggers import TensorBoardLogger
-from monai.data import CacheDataset
 from omegaconf import DictConfig, OmegaConf
 
-from cryoetpicker.data import get_transforms, load_data
+from cryoetpicker.data import get_dataset, get_transforms, load_data
 from cryoetpicker.models import LightningFxUnet3D
 from cryoetpicker.trainers import get_lightning_trainer
 from cryoetpicker.utils import get_callbacks, get_data_loader, get_profiler, set_seed
@@ -44,14 +43,17 @@ def train(cfg: "DictConfig") -> "None":
     set_seed(**cfg.determinism)
 
     train_data, val_data = load_data(**cfg.copick.base, **cfg.copick.fit)
-    train_ds = CacheDataset(
+    train_ds = get_dataset(
         data=train_data,
         transform=get_transforms(**cfg.transforms.base, **cfg.transforms.train),
+        cache_ds=cfg.cache_ds.train,
     )
-    val_ds = CacheDataset(
+    val_ds = get_dataset(
         data=val_data,
         transform=get_transforms(**cfg.transforms.base, **cfg.transforms.validation),
+        cache_ds=cfg.cache_ds.eval,
     )
+
     train_loader = get_data_loader(
         dataset=train_ds, seed=cfg.determinism.seed, **cfg.loader.train
     )

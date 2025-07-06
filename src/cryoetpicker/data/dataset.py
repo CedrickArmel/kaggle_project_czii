@@ -26,7 +26,9 @@ from typing import Any
 from warnings import warn
 
 import copick
+import monai.transforms as mt
 import numpy as np
+from monai.data import CacheDataset, Dataset
 from numpy.typing import NDArray
 from tqdm.auto import tqdm
 
@@ -69,7 +71,7 @@ def load_data(
     voxel_spacing: "int" = 10,
     resolution: "str" = "0",
     tomotype: "str" = "denoised",
-) -> "tuple[list[dict[str, Any]], ...] | list[dict[str, Any]]":
+) -> "Any":
     """Load training/inference data from filesystem"""
     if mode not in ["fit", "test"]:
         raise ValueError(
@@ -128,3 +130,13 @@ def load_data(
         if mode == "fit"
         else test_data * repeat[0]
     )
+
+
+# TODO: add caching rate arguments
+def get_dataset(
+    data: "list[dict[str, Any]]", transform: "mt.Transform", cache_ds: "bool" = False
+):
+    if cache_ds:
+        return CacheDataset(data=data, transform=transform)
+    else:
+        return Dataset(data=data, transform=transform)

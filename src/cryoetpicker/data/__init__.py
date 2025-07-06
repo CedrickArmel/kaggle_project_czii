@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .dataset import load_data
+from .dataset import get_dataset, load_data
 from .transforms import get_transforms
 
-__all__ = ["get_transforms", "load_data"]
+__all__ = ["get_dataset", "get_transforms", "load_data"]
