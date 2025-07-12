@@ -39,18 +39,10 @@ def get_transforms(
     static: "list[mt.Transform]" = [
         mt.EnsureChannelFirstd(keys=keys, channel_dim="no_channel"),
         mt.NormalizeIntensityd(keys=["input"]),
-        mt.Orientationd(keys=keys, axcodes="RAS"),
+        mt.Orientationd(keys=keys, axcodes="RAS", lazy=True),
     ]
     if mode == "train":
         train: "list[mt.Transform]" = [
-            mt.RandRotated(
-                keys=keys,
-                range_x=pi / 6,
-                range_y=pi / 6,
-                prob=0.5,
-                mode="nearest",
-                padding_mode="reflection",
-            ),
             mt.RandCropByLabelClassesd(
                 keys=keys,
                 label_key="target",
@@ -59,6 +51,19 @@ def get_transforms(
                 num_classes=num_classes,
                 ratios=ratios,
                 warn=True,
+                lazy=True,
+            ),
+            ApplyToList(
+                transform=mt.RandRotated(
+                    keys=keys,
+                    range_x=pi / 6,
+                    range_y=pi / 6,
+                    prob=0.5,
+                    mode="nearest",
+                    padding_mode="reflection",
+                    lazy=True,
+                ),
+                keys=keys,
             ),
         ]
         compose: "list[mt.Transform]" = static + train
@@ -73,3 +78,19 @@ def get_transforms(
         compose = static + val
     compose += [mt.FromMetaTensord(keys=["input", "target"], allow_missing_keys=True)]
     return mt.Compose(compose)
+
+
+class ApplyToList(mt.MapTransform):
+    def __init__(
+        self,
+        transform: "mt.Transform",
+        keys: "list[str]",
+        allow_missing_keys: "bool" = False,
+    ):
+        super().__init__(keys=keys, allow_missing_keys=allow_missing_keys)
+        self.transform = transform
+
+    def __call__(self, data):
+        if isinstance(data, list):
+            return [self.transform(d) for d in data]
+        return self.transform(data)
