@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 # TODO: Docstrings
+from math import pi
 
 import monai.transforms as mt
 
@@ -42,6 +43,14 @@ def get_transforms(
     ]
     if mode == "train":
         train: "list[mt.Transform]" = [
+            mt.RandRotated(
+                keys=keys,
+                range_x=pi / 6,
+                range_y=pi / 6,
+                prob=0.5,
+                mode="nearest",
+                padding_mode="reflection",
+            ),
             mt.RandCropByLabelClassesd(
                 keys=keys,
                 label_key="target",
@@ -50,7 +59,7 @@ def get_transforms(
                 num_classes=num_classes,
                 ratios=ratios,
                 warn=True,
-            )
+            ),
         ]
         compose: "list[mt.Transform]" = static + train
     else:
