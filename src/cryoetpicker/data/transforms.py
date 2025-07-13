@@ -30,9 +30,9 @@ def get_transforms(
     mode: "str",
     keys: "list[str]",
     roi_size: "list[int]",
-    num_samples: "int | None" = None,
+    num_samples: "int" = 1,
     num_classes: "int | None" = None,
-    ratios: "list[int] | None" = None,
+    ratios: "list[float | int] | None" = None,
 ) -> "mt.Compose":
     if mode not in ["test", "train", "validation"]:
         raise ValueError("mode argument must be one of eval, test or train!")
@@ -53,17 +53,14 @@ def get_transforms(
                 warn=True,
                 lazy=True,
             ),
-            ApplyToList(
-                transform=mt.RandRotated(
-                    keys=keys,
-                    range_x=pi / 6,
-                    range_y=pi / 6,
-                    prob=0.5,
-                    mode="nearest",
-                    padding_mode="reflection",
-                    lazy=True,
-                ),
+            mt.RandRotated(
                 keys=keys,
+                range_x=pi / 6,
+                range_y=pi / 6,
+                prob=0.5,
+                mode="nearest",
+                padding_mode="reflection",
+                lazy=True,
             ),
         ]
         compose: "list[mt.Transform]" = static + train
@@ -76,21 +73,18 @@ def get_transforms(
             )
         ]
         compose = static + val
-    compose += [mt.FromMetaTensord(keys=["input", "target"], allow_missing_keys=True)]
+    compose += [
+        mt.FromMetaTensord(keys=["input", "target"], allow_missing_keys=True),
+        RemoveKeys(
+            keys=["input_transforms", "target_transforms"], allow_missing_keys=True
+        ),
+    ]
     return mt.Compose(compose)
 
 
-class ApplyToList(mt.MapTransform):
-    def __init__(
-        self,
-        transform: "mt.Transform",
-        keys: "list[str]",
-        allow_missing_keys: "bool" = False,
-    ):
+class RemoveKeys(mt.MapTransform):
+    def __init__(self, keys: "str | list[str]", allow_missing_keys: "bool" = True):
         super().__init__(keys=keys, allow_missing_keys=allow_missing_keys)
-        self.transform = transform
 
     def __call__(self, data):
-        if isinstance(data, list):
-            return [self.transform(d) for d in data]
-        return self.transform(data)
+        return {k: v for k, v in data.items() if k not in self.keys}
